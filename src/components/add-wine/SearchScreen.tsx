@@ -14,6 +14,7 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ onBack, onSelect }) => {
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [aiMode, setAiMode] = useState(false);
 
   const toggleFilter = (f: string) => {
     setActiveFilters(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]);
@@ -29,24 +30,29 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ onBack, onSelect }) => {
 
       setLoading(true);
       try {
-        const params = new URLSearchParams();
-        params.append('q', query || ' '); // Use a space as query if only filters are active
-        
-        // Map filters to type/store params
-        activeFilters.forEach(f => {
-          if (['Rood', 'Wit', 'Rosé', 'Mousserend'].includes(f)) params.append('type', f);
-          if (['Albert Heijn', 'Jumbo', 'Gall & Gall'].includes(f)) params.append('store', f);
-        });
-
-        const response = await fetch(`/api/wine/search?${params.toString()}`);
-        const data = await response.json();
-        
-        // Map backend results (which objects have a `wine` property) to flat list for UI
-        setResults(data.map((r: any) => ({
-          ...r.wine,
-          confidence: r.score,
-          emoji: r.wine.type === 'Rood' ? '🍷' : r.wine.type === 'Wit' ? '🥂' : r.wine.type === 'Rosé' ? '🌸' : '🍾'
-        })));
+        if (aiMode) {
+          const response = await fetch('/api/wine/ai-search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query }),
+          });
+          const data = await response.json();
+          setResults(data);
+        } else {
+          const params = new URLSearchParams();
+          params.append('q', query || ' ');
+          activeFilters.forEach(f => {
+            if (['Rood', 'Wit', 'Rosé', 'Mousserend'].includes(f)) params.append('type', f);
+            if (['Albert Heijn', 'Jumbo', 'Gall & Gall'].includes(f)) params.append('store', f);
+          });
+          const response = await fetch(`/api/wine/search?${params.toString()}`);
+          const data = await response.json();
+          setResults(data.map((r: any) => ({
+            ...r.wine,
+            confidence: r.score,
+            emoji: r.wine.type === 'Rood' ? '🍷' : r.wine.type === 'Wit' ? '🥂' : r.wine.type === 'Rosé' ? '🌸' : '🍾'
+          })));
+        }
       } catch (err) {
         console.error('Search error:', err);
       } finally {
@@ -82,21 +88,45 @@ const SearchScreen: React.FC<SearchScreenProps> = ({ onBack, onSelect }) => {
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Bijv. Chardonnay Jumbo of Pinot..."
+            placeholder={aiMode ? "Vraag de AI vinoloog: bijv. 'een frisse witte voor bij sushi'..." : "Bijv. Chardonnay Jumbo of Pinot..."}
             style={{
               width: '100%',
               padding: '16px 20px 16px 48px',
-              borderRadius: '20px',
-              border: 'none',
+              borderRadius: '24px',
+              border: aiMode ? '2px solid var(--wine-gold)' : 'none',
               fontSize: '16px',
               fontFamily: 'inherit',
-              boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+              boxShadow: aiMode ? '0 0 20px rgba(212, 175, 55, 0.3)' : '0 4px 16px rgba(0,0,0,0.2)',
               outline: 'none',
               background: 'white',
-              color: 'var(--text-main)'
+              color: 'var(--text-main)',
+              transition: 'all 0.3s ease'
             }}
           />
-          <Search size={20} color="var(--text-muted)" style={{ position: 'absolute', left: 16, top: 18 }} />
+          <Search size={20} color={aiMode ? "var(--wine-gold)" : "var(--text-muted)"} style={{ position: 'absolute', left: 16, top: 18 }} />
+          
+          <button 
+            onClick={() => setAiMode(!aiMode)}
+            style={{
+              position: 'absolute',
+              right: 12,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              padding: '6px 12px',
+              borderRadius: '16px',
+              border: 'none',
+              background: aiMode ? 'var(--wine-gold)' : 'rgba(128,0,32,0.1)',
+              color: aiMode ? 'black' : 'var(--wine-burgundy)',
+              fontSize: '11px',
+              fontWeight: 800,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}
+          >
+            {aiMode ? '⚡ AI AAN' : 'AI MODUS'}
+          </button>
         </div>
 
         {/* Filters */}

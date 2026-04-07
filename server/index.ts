@@ -5,15 +5,43 @@ import { prisma } from './lib/prisma.js';
 import { matchingService } from './services/matching.service.js';
 import { ingestionService } from './services/ingestion.service.js';
 import { visionService } from './services/vision.service.js';
+import { aiSearchService } from './services/ai-search.service.js';
 
 dotenv.config();
 
 const app = express();
-// const prisma = new PrismaClient(); // Removed
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
+
+export { app };
+export default app;
+
+// Helper function to enrich wine objects with UI metadata
+function enrichWine(res: any) {
+  const type = (res.wine.type || '').toLowerCase();
+  let emoji = '🍷';
+  let bg = 'linear-gradient(135deg, #3a0010 0%, #800020 100%)';
+
+  if (type.includes('wit')) {
+    emoji = '🥂';
+    bg = 'linear-gradient(135deg, #172412 0%, #2d5c0e 100%)';
+  } else if (type.includes('rose') || type.includes('rosé')) {
+    emoji = '🌸';
+    bg = 'linear-gradient(135deg, #4a001e 0%, #9b111e 100%)';
+  } else if (type.includes('mousserend') || type.includes('bubbels')) {
+    emoji = '🍾';
+    bg = 'linear-gradient(135deg, #0f1c11 0%, #1a3a1f 100%)';
+  }
+
+  return {
+    ...res.wine,
+    confidence: `${Math.round(res.score * 100)}%`,
+    emoji,
+    bg,
+  };
+}
 
 // Initialize Server: Seed data if database is empty
 async function initializeServer() {
@@ -52,6 +80,21 @@ app.get('/api/wine/search', async (req, res) => {
   }
 });
 
+app.post('/api/wine/ai-search', async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query || typeof query !== 'string') {
+      return res.status(400).json({ error: 'query is required.' });
+    }
+
+    const results = await aiSearchService.search(query);
+    res.json(results.map(enrichWine));
+  } catch (error) {
+    console.error('AI search error:', error);
+    res.status(500).json({ error: 'Internal server error during AI search.' });
+  }
+});
+
 app.post('/api/wine/recognize', async (req, res) => {
   try {
     const { ocrText, image } = req.body;
@@ -67,33 +110,7 @@ app.post('/api/wine/recognize', async (req, res) => {
     }
 
     const results = await matchingService.recognizeFromOCR(textToMatch);
-    
-    // Enrich results with UI metadata for the frontend (emojis, colors, confidence string)
-    const enrichedResults = results.map(res => {
-      const type = (res.wine.type || '').toLowerCase();
-      let emoji = '🍷';
-      let bg = 'linear-gradient(135deg, #3a0010 0%, #800020 100%)';
-
-      if (type.includes('wit')) {
-        emoji = '🥂';
-        bg = 'linear-gradient(135deg, #172412 0%, #2d5c0e 100%)';
-      } else if (type.includes('rose') || type.includes('rosé')) {
-        emoji = '🌸';
-        bg = 'linear-gradient(135deg, #4a001e 0%, #9b111e 100%)';
-      } else if (type.includes('mousserend') || type.includes('bubbels')) {
-        emoji = '🍾';
-        bg = 'linear-gradient(135deg, #0f1c11 0%, #1a3a1f 100%)';
-      }
-
-      return {
-        ...res.wine,
-        confidence: `${Math.round(res.score * 100)}%`,
-        emoji,
-        bg,
-      };
-    });
-
-    res.json(enrichedResults);
+    res.json(results.map(enrichWine));
   } catch (error) {
     console.error('Recognition error:', error);
     res.status(500).json({ error: 'Internal server error during recognition.' });
@@ -102,8 +119,6 @@ app.post('/api/wine/recognize', async (req, res) => {
 
 app.post('/api/wine/sync', async (req, res) => {
   try {
-    // Logic for triggering a new sync from De Grote Hamersma
-    // Simulating call to Hamersma source ingestion
     await ingestionService.seedInitialData(); 
     await matchingService.init();
     res.json({ message: 'Sync completed successfully' });
@@ -118,7 +133,9 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', server: 'WineApp Recognition Backend' });
 });
 
-app.listen(PORT, async () => {
-  console.log(`🚀 WineApp Backend running on port ${PORT}`);
-  await initializeServer();
-});
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, async () => {
+    console.log(`🚀 WineApp Backend running on port ${PORT}`);
+    await initializeServer();
+  });
+}

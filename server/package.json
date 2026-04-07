@@ -10,6 +10,7 @@
     "db:push": "prisma db push"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@prisma/adapter-better-sqlite3": "^7.6.0",
     "@prisma/client": "7.6.0",
     "@prisma/config": "^7.6.0",
