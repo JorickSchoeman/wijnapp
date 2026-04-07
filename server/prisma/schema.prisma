@@ -1,0 +1,50 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Wine {
+  id                String   @id @default(uuid())
+  name              String
+  winery            String
+  grape             String
+  region            String
+  type              String   // Rood, Wit, Rosé, etc.
+  year              String   // Jaargang
+  price             Float?
+  store             String?
+  score             String?  // Hamersma score
+  description       String?
+  url               String?
+  reviewDate        DateTime?
+  source            String   @default("De Grote Hamersma")
+  
+  // Canonical fields for search/match
+  canonicalName     String
+  canonicalProducer String
+  canonicalRegion   String
+  canonicalGrapes   String
+  
+  // Metadata
+  confidence        Float?
+  lastSyncedAt      DateTime @default(now())
+
+  // Raw data association
+  sourceRecordId    String?
+  sourceRecord      SourceRecord? @relation(fields: [sourceRecordId], references: [id])
+}
+
+model SourceRecord {
+  id              String   @id @default(uuid())
+  sourceName      String   @default("Hamersma")
+  externalId      String?
+  rawPayload      String   // JSON string
+  normalizedPayload String? // JSON string
+  importedAt      DateTime @default(now())
+  checksum        String?
+  
+  wines           Wine[]
+}
